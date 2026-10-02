@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StopSight - how far does your car need to stop?</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#1c1d22; color:#eeeef2; line-height:1.5; }
+  .wrap { max-width:700px; margin:0 auto; padding:26px 16px 50px; }
+  h1 { font-size:28px; } h1 span { color:#ffd43b; }
+  .sub { color:#a6a8b3; margin:6px 0 16px; }
+  .card { background:#2a2c34; border-radius:14px; padding:14px; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; }
+  label { font-size:12px; color:#a6a8b3; display:block; margin-bottom:3px; }
+  input,select { width:100%; background:#1c1d22; color:#eeeef2; border:1px solid #484b57; border-radius:8px; padding:8px; font-size:15px; font-family:inherit; }
+  button { background:#3b3e4a; color:#eeeef2; border:0; padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px; margin-right:6px; margin-top:10px; }
+  .big { font-size:54px; font-weight:800; color:#ffd43b; line-height:1; } .big small { font-size:17px; color:#a6a8b3; font-weight:600; }
+  .road { position:relative; height:46px; background:#15161a; border-radius:8px; margin-top:14px; overflow:hidden; }
+  .road i { position:absolute; top:0; height:100%; } .road .t { background:#f08c3a; } .road .b { background:#e0494f; } .road .o { background:#6ee7c8; width:4px; }
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-size:12.5px; color:#a6a8b3; margin-top:8px; } .legend span:before { content:''; display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; background:var(--c); }
+  .stats { display:flex; gap:22px; flex-wrap:wrap; margin-top:14px; } .stats b { display:block; font-size:20px; } .muted { color:#a6a8b3; font-size:13px; }
+  .verdict { margin-top:14px; padding:10px 12px; border-radius:8px; font-weight:700; } .ok { background:#17382f; color:#6ee7c8; } .hit { background:#4a1e22; color:#ff8a8f; }
+  .err { color:#ff9c8a; } .note { font-size:12.5px; color:#7c7f8c; margin-top:6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stop<span>Sight</span></h1>
+  <div class="sub">Speed, reaction time and road surface in. Thinking distance, braking distance and what happens if something is in the way.</div>
+  <div class="card">
+    <div class="grid"><div><label>Speed</label><input id="sp" value="30" inputmode="decimal"></div><div><label>Unit</label><select id="un"><option value="mph">mph</option><option value="kmh">km/h</option></select></div><div><label>Reaction time</label><select id="rt"><option value="0.67">0.67 s (Highway Code)</option><option value="1" >1.0 s alert</option><option value="1.5" selected>1.5 s typical</option><option value="2.5">2.5 s distracted</option></select></div><div><label>Road</label><select id="sf"><option value="dry">Dry</option><option value="wet">Wet</option><option value="ice">Ice</option></select></div><div><label>Grade % (- downhill)</label><input id="gr" value="0" inputmode="decimal"></div><div><label>Obstacle ahead (m)</label><input id="ob" value="40" inputmode="decimal"></div></div>
+    <button id="e1">Child at 40 m, 30 mph</button><button id="e2">Same, 40 mph</button><button id="e3">Wet, 60 mph</button>
+  </div>
+  <div class="card" id="out"></div>
+  <div class="note">Calibrated to the Highway Code typical stopping distances: a 0.67 s thinking time and friction of 0.66 on a dry road give 12 to 97 m from 20 to 70 mph against the published 12 to 96 m. Wet doubles and ice multiplies braking distance by ten, as rule 126 advises for gaps. A real stop depends on tyres, brakes, load and the driver. Obstacle distance is measured from the moment the hazard appears. This is an estimate, not a safety guarantee. Runs in your browser, nothing stored.</div>
+</div>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var S = window.StopSight, $ = function (i) { return document.getElementById(i); };
+  function f(x, d) { return x.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function render() {
+    var u = $('un').value, s = S.stop($('sp').value, u, $('rt').value, S.SURFACES[$('sf').value], $('gr').value);
+    if (!s) { $('out').innerHTML = '<div class="err">Enter a speed above 0 and a grade the road can hold at this friction.</div>'; return; }
+    var ob = parseFloat($('ob').value), im = isFinite(ob) && ob >= 0 ? S.impact($('sp').value, u, $('rt').value, S.SURFACES[$('sf').value], $('gr').value, ob) : null;
+    var scale = Math.max(s.total, im ? ob : 0) * 1.08, pct = function (x) { return (x / scale * 100).toFixed(2) + '%'; };
+    var h = '<div class="big">' + f(s.total, 0) + ' m <small>' + f(s.totalFt, 0) + ' ft, about ' + f(s.cars, 0) + ' car lengths</small></div>' +
+      '<div class="road"><i class="t" style="left:0;width:' + pct(s.think) + '"></i><i class="b" style="left:' + pct(s.think) + ';width:' + pct(s.brake) + '"></i>' + (im ? '<i class="o" style="left:' + pct(ob) + '"></i>' : '') + '</div>' +
+      '<div class="legend"><span style="--c:#f08c3a">Thinking</span><span style="--c:#e0494f">Braking</span>' + (im ? '<span style="--c:#6ee7c8">Obstacle</span>' : '') + '</div>' +
+      '<div class="stats"><div><span class="muted">Thinking</span><b>' + f(s.think, 1) + ' m</b></div><div><span class="muted">Braking</span><b>' + f(s.brake, 1) + ' m</b></div><div><span class="muted">Time to stop</span><b>' + f(s.timeToStop, 1) + ' s</b></div><div><span class="muted">Deceleration</span><b>' + f(s.a / S.G, 2) + ' g</b></div></div>';
+    if (im) h += im.hit ? '<div class="verdict hit">Obstacle at ' + f(ob, 0) + ' m: you cannot stop in time. You hit it at ' + f(S.fromMs(im.v, u), 0) + ' ' + (u === 'mph' ? 'mph' : 'km/h') + '.</div>' : '<div class="verdict ok">Obstacle at ' + f(ob, 0) + ' m: you stop with ' + f(im.margin, 1) + ' m to spare.</div>';
+    $('out').innerHTML = h;
+  }
+  function set(sp, rt, sf, ob) { $('un').value = 'mph'; $('sp').value = sp; $('rt').value = rt; $('sf').value = sf; $('gr').value = 0; $('ob').value = ob; render(); }
+  document.addEventListener('input', render); document.addEventListener('change', render);
+  $('e1').onclick = function () { set(30, '1.5', 'dry', 40); }; $('e2').onclick = function () { set(40, '1.5', 'dry', 40); }; $('e3').onclick = function () { set(60, '1.5', 'wet', 100); };
+  render();
+})();
+</script>
+</body>
+</html>
